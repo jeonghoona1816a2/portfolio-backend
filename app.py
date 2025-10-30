@@ -183,3 +183,8 @@ def delete_project(project_id: int):
         )
         if result.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
