@@ -3,31 +3,35 @@ import json
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional
 
 from db import get_engine
 
+# .env 로드
 DOTENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=DOTENV_PATH, override=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 앱 시작할 때 DB 엔진 만들어서 state에 넣기
     app.state.engine = get_engine()
     try:
         yield
     finally:
+        # 앱 종료 시 커넥션 정리
         app.state.engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan)
 
+# CORS 설정
 origins = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
 if origins:
     app.add_middleware(
@@ -39,12 +43,29 @@ if origins:
     )
 
 
+# ─────────────────────────────
+# 1. Render가 보는 헬스체크 (가벼움)
+# ─────────────────────────────
+@app.get("/healthz")
+def healthz():
+    # 여기서는 DB까지 안 보고 "서버 살아있다" 만 알려줌
+    return {"ok": True}
+
+
+# ─────────────────────────────
+# 2. 우리가 보는 헬스체크 (DB까지 확인)
+# ─────────────────────────────
 @app.get("/health")
 def health():
+    # DB 연결 확인
     with app.state.engine.connect() as conn:
-        return {"ok": conn.execute(text("select 1")).scalar() == 1}
+        ok = conn.execute(text("select 1")).scalar() == 1
+        return {"ok": ok}
 
 
+# ─────────────────────────────
+#  프로젝트 목록 조회
+# ─────────────────────────────
 @app.get("/projects")
 def list_projects():
     with app.state.engine.begin() as conn:
@@ -183,8 +204,3 @@ def delete_project(project_id: int):
         )
         if result.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
-
-@app.get("/healthz")
-def healthz():
-    return {"ok": True}
