@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 DOTENV_PATH = Path(__file__).resolve().parent / ".env"
-print(f"🔧 .env exists: {DOTENV_PATH.exists()} → {DOTENV_PATH}")
+print(f"[seed] .env exists: {DOTENV_PATH.exists()} -> {DOTENV_PATH}")
 load_dotenv(dotenv_path=DOTENV_PATH, override=True)
 
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
@@ -34,8 +34,8 @@ def mask_url(url: str) -> str:
         return "[masked]"
 
 
-print("🔧 DB URL:", mask_url(DATABASE_URL))
-print("🔧 PROJECT_REF:", PROJECT_REF)
+print("[seed] DB URL:", mask_url(DATABASE_URL))
+print("[seed] PROJECT_REF:", PROJECT_REF)
 
 connect_args = {}
 try:
@@ -45,7 +45,7 @@ except Exception:
     has_options = False
 if PROJECT_REF and not has_options:
     connect_args["options"] = f"project={PROJECT_REF}"
-print("🔧 connect_args:", connect_args)
+print("[seed] connect_args:", connect_args)
 
 engine = create_engine(
     DATABASE_URL,
@@ -56,7 +56,7 @@ engine = create_engine(
 
 with engine.connect() as conn:
     ok = conn.execute(text("select 1")).scalar() == 1
-    print("✅ ping:", ok)
+    print("[seed] ping:", ok)
 
 projects_json_path = (
     Path(__file__).resolve().parents[1]
@@ -94,7 +94,9 @@ def normalize(item: dict) -> dict:
     }
 
 
-rows = [normalize(item) for item in data]
+# 프로젝트 JSON이 "최신이 위"라면 DB id가 거꾸로 매겨지는 걸 막기 위해
+# 역순으로 insert해서 오래된 것부터 id가 증가하도록 정렬한다.
+rows = list(reversed([normalize(item) for item in data]))
 
 with engine.begin() as conn:
     conn.execute(
@@ -153,4 +155,4 @@ with engine.begin() as conn:
             },
         )
 
-print(f"✅ inserted/updated: {len(rows)} rows")
+print(f"[seed] inserted/updated: {len(rows)} rows")
